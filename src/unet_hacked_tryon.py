@@ -471,6 +471,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 image_embed_dim=encoder_hid_dim,
                 cross_attention_dim=cross_attention_dim,
             )
+        # My note: include handling when encoder_hid_dim_type == "ip_image_proj"
         elif encoder_hid_dim_type == "ip_image_proj":
             # Kandinsky 2.2
             self.encoder_hid_proj = Resampler(
@@ -768,7 +769,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 positive_len=positive_len, out_dim=cross_attention_dim, feature_type=feature_type
             )
 
-
+        # My note: addtional changes ######################################
 
         from ip_adapter.attention_processor import IPAttnProcessor2_0 as IPAttnProcessor, AttnProcessor2_0 as AttnProcessor
 
@@ -789,7 +790,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 layer_name = name.split(".processor")[0]
                 attn_procs[name] = IPAttnProcessor(hidden_size=hidden_size, cross_attention_dim=cross_attention_dim, num_tokens=16)
         self.set_attn_processor(attn_procs)
-
+        ####################### End of change ##########################
 
     @property
     def attn_processors(self) -> Dict[str, AttentionProcessor]:

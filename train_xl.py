@@ -3,6 +3,7 @@ import random
 import argparse
 import json
 import itertools
+from typing import Literal, Tuple,List
 import torch
 import torch.nn.functional as F
 from torchvision import transforms
@@ -12,19 +13,18 @@ from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration
 from diffusers import AutoencoderKL, DDPMScheduler
 from transformers import CLIPTextModel, CLIPTokenizer, CLIPVisionModelWithProjection, CLIPTextModelWithProjection
+import torch.utils.data as data
+import torchvision.transforms.functional as TF
+import math
+from tqdm.auto import tqdm
+from diffusers.training_utils import compute_snr
+from diffusers.utils.import_utils import is_xformers_available
 
 from src.unet_hacked_tryon import UNet2DConditionModel
 from src.unet_hacked_garmnet import UNet2DConditionModel as UNet2DConditionModel_ref
 from src.tryon_pipeline import StableDiffusionXLInpaintPipeline as TryonPipeline
-
 from ip_adapter.ip_adapter import Resampler
-from diffusers.utils.import_utils import is_xformers_available
-from typing import Literal, Tuple,List
-import torch.utils.data as data
-import math
-from tqdm.auto import tqdm
-from diffusers.training_utils import compute_snr
-import torchvision.transforms.functional as TF
+
 
 
 
@@ -119,6 +119,7 @@ class VitonHDDataset(data.Dataset):
         self.dataroot_names = dataroot_names
         self.flip_transform = transforms.RandomHorizontalFlip(p=1)
         self.clip_processor = CLIPImageProcessor()
+    
     def __getitem__(self, index):
         c_name = self.c_names[index]
         im_name = self.im_names[index]
@@ -159,6 +160,7 @@ class VitonHDDataset(data.Dataset):
 
 
             if random.random()>0.5:
+                # My note: color_jitter can be receive directly image and transform it, but that does not guarantee same random agumentation is applied to both images. TF.adjust_XXX is used to ensure both images get transform consistently.
                 color_jitter = transforms.ColorJitter(brightness=0.5, contrast=0.3, saturation=0.5, hue=0.5)
                 fn_idx, b, c, s, h = transforms.ColorJitter.get_params(color_jitter.brightness, color_jitter.contrast, color_jitter.saturation,color_jitter.hue)
                 
@@ -193,14 +195,20 @@ class VitonHDDataset(data.Dataset):
                 image = transforms.functional.affine(
                     image,
                     angle=0,
-                    translate=[shift_valx * image.shape[-1], shift_valy * image.shape[-2]],
+                    translate=[
+                        shift_valx * image.shape[-1], 
+                        shift_valy * image.shape[-2]
+                    ],
                     scale=1,
                     shear=0,
                 )
                 mask = transforms.functional.affine(
                     mask,
                     angle=0,
-                    translate=[shift_valx * mask.shape[-1], shift_valy * mask.shape[-2]],
+                    translate=[
+                        shift_valx * mask.shape[-1], 
+                        shift_valy * mask.shape[-2]
+                    ],
                     scale=1,
                     shear=0,
                 )
@@ -236,8 +244,8 @@ class VitonHDDataset(data.Dataset):
         result["image"] = image
         result["cloth"] = cloth_trim
         result["cloth_pure"] = self.transform(cloth)
-        result["inpaint_mask"] = 1-mask
-        result["im_mask"] = im_mask
+        result["inpaint_mask"] = 1-mask # black for non-cloth region, and white for cloth region.
+        result["im_mask"] = im_mask # agnostic image, i.e. cloth being removed
         result["caption"] = "model is wearing " + cloth_annotation
         result["caption_cloth"] = "a photo of " + cloth_annotation
         result["annotation"] = cloth_annotation
@@ -248,8 +256,6 @@ class VitonHDDataset(data.Dataset):
 
     def __len__(self):
         return len(self.im_names)
-
-
 
 
 def parse_args():
@@ -295,12 +301,7 @@ def parse_args():
     return args
 
 
-
-
-
 def main():
-
-
     args = parse_args()
     accelerator_project_config = ProjectConfiguration(project_dir=args.output_dir)
     accelerator = Accelerator(
@@ -334,8 +335,8 @@ def main():
 
 
     state_dict = torch.load(args.pretrained_ip_adapter_path, map_location="cpu")
- 
- 
+
+
     adapter_modules = torch.nn.ModuleList(unet.attn_processors.values())
     adapter_modules.load_state_dict(state_dict["ip_adapter"],strict=True)
 
@@ -365,6 +366,7 @@ def main():
     torch.nn.init.kaiming_normal_(conv_new.weight)  
     conv_new.weight.data = conv_new.weight.data * 0.  
 
+    # My Note: The original unet.conv_in expect input having 9 channels; keep the pretrained weight intact and init the pose channels with zeros to maximize knowledge of the pretrain, while prevent pose information from interfering at the first step.
     conv_new.weight.data[:, :9] = unet.conv_in.weight.data  
     conv_new.bias.data = unet.conv_in.bias.data  
 
@@ -392,8 +394,6 @@ def main():
     image_encoder.requires_grad_(False)
     unet_encoder.requires_grad_(False)
     unet.requires_grad_(True)
-
-
 
 
     if args.enable_xformers_memory_efficient_attention:
@@ -489,6 +489,7 @@ def main():
     for epoch in range(first_epoch, args.num_train_epochs):
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(unet), accelerator.accumulate(image_proj_model):
+                # My Note: logging
                 if global_step % args.logging_steps == 0:
                     if accelerator.is_main_process:
                         with torch.no_grad():
@@ -592,8 +593,6 @@ def main():
                         del unwrapped_unet
                         del newpipe                
                         torch.cuda.empty_cache()
-
-
 
                 pixel_values = batch["image"].to(dtype=vae.dtype)
                 model_input = vae.encode(pixel_values).latent_dist.sample()

@@ -45,6 +45,7 @@ from diffusers.models.embeddings import (
     Timesteps,
 )
 from diffusers.models.modeling_utils import ModelMixin
+# My Note: import custom code to replace code from diffusers.models.unet_2d_blocks
 from src.unet_block_hacked_garmnet import (
     UNetMidBlock2D,
     UNetMidBlock2DCrossAttn,
@@ -456,7 +457,6 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
             input_channel = output_channel
             output_channel = block_out_channels[i]
             is_final_block = i == len(block_out_channels) - 1
-
             down_block = get_down_block(
                 down_block_type,
                 num_layers=layers_per_block[i],
@@ -1153,7 +1153,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
 
         # 2. pre-process
         sample = self.conv_in(sample)
-        garment_features=[]
+        garment_features=[] # My Note: change from official code
 
         # 2.5 GLIGEN position net
         if cross_attention_kwargs is not None and cross_attention_kwargs.get("gligen", None) is not None:
@@ -1193,7 +1193,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 additional_residuals = {}
                 if is_adapter and len(down_intrablock_additional_residuals) > 0:
                     additional_residuals["additional_residuals"] = down_intrablock_additional_residuals.pop(0)
-
+                # My note: return additional output `out_garment_feat`
                 sample, res_samples,out_garment_feat = downsample_block(
                     hidden_states=sample,
                     temb=emb,
@@ -1226,6 +1226,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         # 4. mid
         if self.mid_block is not None:
             if hasattr(self.mid_block, "has_cross_attention") and self.mid_block.has_cross_attention:
+                # My note: return additinal output `out_garment_feat`
                 sample,out_garment_feat = self.mid_block(
                     sample,
                     emb,
