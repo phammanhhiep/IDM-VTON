@@ -158,22 +158,22 @@ class VitonHDTestDataset(data.Dataset):
             cloth_annotation = self.annotation_pair[c_name]
         else:
             cloth_annotation = "shirts"
-        cloth = Image.open(os.path.join(self.dataroot, self.phase, "cloth", c_name))
+        cloth = Image.open(os.path.join(self.dataroot, "cloth", c_name))
 
         im_pil_big = Image.open(
-            os.path.join(self.dataroot, self.phase, "image", im_name)
-        ).resize((self.width,self.height))
+            os.path.join(self.dataroot, "image", im_name)
+        ).resize((self.width, self.height))
         image = self.transform(im_pil_big)
 
-        mask = Image.open(os.path.join(self.dataroot, self.phase, "agnostic-mask", im_name.replace('.jpg','_mask.png'))).resize((self.width,self.height))
+        mask = Image.open(os.path.join(self.dataroot, "agnostic-mask", im_name.replace('.jpg','_mask.png'))).resize((self.width, self.height))
         mask = self.toTensor(mask)
         mask = mask[:1]
         mask = 1-mask
         im_mask = image * mask
  
         pose_img = Image.open(
-            os.path.join(self.dataroot, self.phase, "image-densepose", im_name)
-        )
+            os.path.join(self.dataroot, "image-densepose", im_name)
+        ).resize((self.width, self.height))
         pose_img = self.transform(pose_img)  # [-1,1]
  
         result = {}
@@ -414,8 +414,16 @@ def main():
 
 
                     for i in range(len(images)):
+                        ori_image = (sample["image"][i] / 2 + 0.5)
+                        tryon_cloth = (sample["cloth_pure"][i] / 2 + 0.5)
                         x_sample = pil_to_tensor(images[i])
-                        torchvision.utils.save_image(x_sample,os.path.join(args.output_dir,sample['im_name'][i]))
+                        final_output = torch.concat([
+                            ori_image, x_sample, tryon_cloth
+                            ], dim=2)
+                        ori_image_name = sample['im_name'][i].split(".")[0]
+                        pure_cloth_name = sample['im_name'][i]
+                        output_name = f"{ori_image_name}_{pure_cloth_name}" 
+                        torchvision.utils.save_image(final_output, os.path.join(args.output_dir, output_name))
                 
 
 
