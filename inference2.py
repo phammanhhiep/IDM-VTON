@@ -56,6 +56,8 @@ def parse_args():
     parser.add_argument("--output_dir",type=str,default="result",)
     parser.add_argument("--unpaired",action="store_true",)
     parser.add_argument("--data_dir",type=str,default="/home/omnious/workspace/yisol/Dataset/zalando")
+    parser.add_argument("--data_pair_path", type=str, default="")
+    parser.add_argument("--annotation_path", type=str, default="")
     parser.add_argument("--seed", type=int, default=42,)
     parser.add_argument("--test_batch_size", type=int, default=2,)
     parser.add_argument("--guidance_scale",type=float,default=2.0,)
@@ -79,6 +81,8 @@ class VitonHDTestDataset(data.Dataset):
         phase: Literal["train", "test"],
         order: Literal["paired", "unpaired"] = "paired",
         size: Tuple[int, int] = (512, 384),
+        data_pair_path="",
+        annotation_path="",
     ):
         super(VitonHDTestDataset, self).__init__()
         self.dataroot = dataroot_path
@@ -95,9 +99,9 @@ class VitonHDTestDataset(data.Dataset):
         self.toTensor = transforms.ToTensor()
 
         # My note: the tag file contain text description, and bounding box of person and cloth in images in the two folders, "image" and "cloth".
-        with open(
-            os.path.join(dataroot_path, phase, "vitonhd_" + phase + "_tagged.json"), "r"
-        ) as file1:
+        if not annotation_path:
+            annotation_path = os.path.join(dataroot_path, phase, "vitonhd_" + phase + "_tagged.json")
+        with open(annotation_path, "r") as file1:
             data1 = json.load(file1)
 
         annotation_list = [
@@ -128,23 +132,15 @@ class VitonHDTestDataset(data.Dataset):
         c_names = []
         dataroot_names = []
 
-
-        if phase == "train":
-            filename = os.path.join(dataroot_path, f"{phase}_pairs.txt")
-        else:
-            filename = os.path.join(dataroot_path, f"{phase}_pairs.txt")
+        filename = data_pair_path if data_pair_path else os.path.join(dataroot_path, f"{phase}_pairs.txt")
 
         with open(filename, "r") as f:
             for line in f.readlines():
-                if phase == "train":
+                if phase == "train" or order == "paired":
                     im_name, _ = line.strip().split()
                     c_name = im_name
                 else:
-                    if order == "paired":
-                        im_name, _ = line.strip().split()
-                        c_name = im_name
-                    else:
-                        im_name, c_name = line.strip().split()
+                    im_name, c_name = line.strip().split()
 
                 im_names.append(im_name)
                 c_names.append(c_name)
@@ -154,6 +150,7 @@ class VitonHDTestDataset(data.Dataset):
         self.c_names = c_names
         self.dataroot_names = dataroot_names
         self.clip_processor = CLIPImageProcessor()
+
     def __getitem__(self, index):
         c_name = self.c_names[index]
         im_name = self.im_names[index]
@@ -196,8 +193,6 @@ class VitonHDTestDataset(data.Dataset):
     def __len__(self):
         # model images + cloth image
         return len(self.im_names)
-
-
 
 
 def main():
@@ -307,6 +302,8 @@ def main():
         phase="test",
         order="unpaired" if args.unpaired else "paired",
         size=(args.height, args.width),
+        data_pair_path=args.data_pair_path,
+        annotation_path=args.annotation_path,
     )
     test_dataloader = torch.utils.data.DataLoader(
         test_dataset,
