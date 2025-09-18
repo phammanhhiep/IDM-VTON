@@ -421,7 +421,7 @@ def main():
                             ori_image, x_sample, tryon_cloth
                             ], dim=2)
                         ori_image_name = sample['im_name'][i].split(".")[0]
-                        pure_cloth_name = sample['im_name'][i]
+                        pure_cloth_name = sample['c_name'][i]
                         output_name = f"{ori_image_name}_{pure_cloth_name}" 
                         torchvision.utils.save_image(final_output, os.path.join(args.output_dir, output_name))
                 
