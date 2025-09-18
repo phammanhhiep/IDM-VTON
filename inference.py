@@ -341,6 +341,7 @@ def main():
         with torch.cuda.amp.autocast():
             with torch.no_grad():
                 for sample in test_dataloader:
+                    # My note: img_emb_list and image_embeds should not used at all since sample['cloth'] already a tensor. 
                     img_emb_list = []
                     for i in range(sample['cloth'].shape[0]):
                         img_emb_list.append(sample['cloth'][i])

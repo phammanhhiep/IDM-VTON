@@ -599,6 +599,7 @@ class StableDiffusionXLInpaintPipeline(
             [self.text_encoder, self.text_encoder_2] if self.text_encoder is not None else [self.text_encoder_2]
         )
 
+        # My Note: define prompt_embeds
         if prompt_embeds is None:
             prompt_2 = prompt_2 or prompt
             prompt_2 = [prompt_2] if isinstance(prompt_2, str) else prompt_2
@@ -644,6 +645,7 @@ class StableDiffusionXLInpaintPipeline(
 
             prompt_embeds = torch.concat(prompt_embeds_list, dim=-1)
 
+        # My Note: define negative_prompt_embeds.
         # get unconditional embeddings for classifier free guidance
         zero_out_negative_prompt = negative_prompt is None and self.config.force_zeros_for_empty_prompt
         if do_classifier_free_guidance and negative_prompt_embeds is None and zero_out_negative_prompt:

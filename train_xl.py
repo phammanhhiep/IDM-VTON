@@ -141,7 +141,7 @@ class VitonHDDataset(data.Dataset):
 
         mask = Image.open(os.path.join(self.dataroot, self.phase, "agnostic-mask", im_name.replace('.jpg','_mask.png'))).resize((self.width,self.height))
         mask = self.toTensor(mask)
-        mask = mask[:1]
+        mask = mask[:1] # My note: unnessessary; the author concern the mask may be read as RGB, and thus having 3 channel; the line will take only data of the first channel.
         densepose_name = im_name
         densepose_map = Image.open(
             os.path.join(self.dataroot, self.phase, "image-densepose", densepose_name)
@@ -714,6 +714,7 @@ def main():
                 elif noise_scheduler.config.prediction_type == "v_prediction":
                     target = noise_scheduler.get_velocity(model_input, noise, timesteps)
                 elif noise_scheduler.config.prediction_type == "sample":
+                    # My Note: model_pred is call before being defined.
                     # We set the target to latents here, but the model_pred will return the noise sample prediction.
                     target = model_input
                     # We will have to subtract the noise residual from the prediction to get the target sample.
